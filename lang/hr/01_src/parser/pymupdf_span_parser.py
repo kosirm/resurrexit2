@@ -369,16 +369,34 @@ class PyMuPDFSpanParser:
         """Check if line is a title based on content, font size, and color"""
         text_clean = text.strip()
 
-        # Check if text is mostly uppercase (allowing for mixed case in parentheses)
-        # Remove parentheses content for uppercase check
+        # Enhanced title detection for Croatian songs
         import re
-        text_without_parens = re.sub(r'\([^)]*\)', '', text_clean).strip()
-        is_mostly_uppercase = text_without_parens.isupper() if text_without_parens else text_clean.isupper()
 
-        # Title criteria: mostly uppercase, reasonable length, larger font (pink is preferred but not required)
+        # Remove biblical references and parentheses content for uppercase check
+        # Common patterns: "- Ps 64 (65)", "- Mt 5,1-12", "(Kroz godinu)", etc.
+        text_for_case_check = re.sub(r'\s*-\s*[A-Z][a-z]+\s*\d+[^)]*(\([^)]*\))?', '', text_clean)
+        text_for_case_check = re.sub(r'\([^)]*\)', '', text_for_case_check).strip()
+
+        # Check if the main part (without biblical refs) is mostly uppercase
+        # Allow some lowercase letters for prepositions, conjunctions, etc.
+        if text_for_case_check:
+            uppercase_chars = sum(1 for c in text_for_case_check if c.isupper())
+            lowercase_chars = sum(1 for c in text_for_case_check if c.islower())
+            total_letters = uppercase_chars + lowercase_chars
+
+            if total_letters > 0:
+                uppercase_ratio = uppercase_chars / total_letters
+                is_mostly_uppercase = uppercase_ratio >= 0.7  # At least 70% uppercase
+            else:
+                is_mostly_uppercase = True  # No letters, consider as valid
+        else:
+            is_mostly_uppercase = text_clean.isupper()
+
+        # Title criteria: mostly uppercase, reasonable length, larger font, pink color preferred
         return (is_mostly_uppercase and
-                len(text_clean) > 8 and
-                font_size >= 12.0 and  # Larger or equal font (relaxed requirement)
+                len(text_clean) > 4 and  # Reduced from 8 to 4 for short titles like "TE DEUM", "DUHOVI"
+                font_size >= 12.0 and  # Larger or equal font
+                is_pink and  # Pink color is required for titles
                 not any(role in text_clean for role in self.role_markers) and
                 not self._is_chord_line_text(text_clean) and
                 'kapodaster' not in text_clean.lower())
