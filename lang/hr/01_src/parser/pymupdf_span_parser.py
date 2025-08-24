@@ -37,7 +37,7 @@ class Song:
 
 class PyMuPDFSpanParser:
     def __init__(self):
-        self.role_markers = ['K.+Z.', 'K.', 'Z.', 'P.']
+        self.role_markers = ['K.+Z.', 'K.+P.', 'K.', 'Z.', 'P.', 'D.']
         
         # Croatian chord system
         self.base_chords = {
