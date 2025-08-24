@@ -1,0 +1,2 @@
+w chordprofolder "lang/hr/03_pdf" "lang/hr/04_chordpro" "lang/hr/01_src/parser/pymupdf_span_parser.py"
+w htmlfolder "lang/hr/04_chordpro" "lang/hr/05_html" "lang/hr/01_src/parser/chordpro_to_html_equal_spacing.py"
