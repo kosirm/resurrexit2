@@ -860,32 +860,23 @@ case "$1" in
                 filename=$(basename "$pdf_file" .pdf)
                 echo "🎵 Processing: $filename.pdf"
 
-                # Let parser generate title-based filename, then move to output directory
-                if python $(basename "$parser_file") --input "$pdf_file" --song-name "$filename" 2>&1; then
-                # Extract number prefix (e.g., "2-01-" from "2-01-poko")
-                number_prefix=$(echo "$filename" | grep -o '^[0-9]\+-[0-9]\+-')
-                if [ -n "$number_prefix" ]; then
-                    # Find the generated file with number prefix
-                    generated_file=$(ls ${number_prefix}*.chordpro 2>/dev/null | head -1)
-                else
-                    # Fallback: look for files starting with original filename
-                    generated_file=$(ls ${filename}*.chordpro 2>/dev/null | head -1)
-                fi
+                # Count ChordPro files before parsing
+                files_before=$(find "$output_abs_path" -name "*.chordpro" 2>/dev/null | wc -l)
 
-                if [ -z "$generated_file" ]; then
-                    # Final fallback: look for basic filename
-                    generated_file="${filename}.chordpro"
-                fi
+                # Let parser generate its own filename (title-based for Slovenian/Croatian)
+                # Pass output directory so parser knows where to save files
+                if python $(basename "$parser_file") --input "$pdf_file" --output "$output_abs_path/dummy.chordpro" --song-name "$filename" 2>&1; then
+                    # Count ChordPro files after parsing
+                    files_after=$(find "$output_abs_path" -name "*.chordpro" 2>/dev/null | wc -l)
 
-                if [ -f "$generated_file" ]; then
-                    # Move to output directory
-                    mv "$generated_file" "$output_abs_path/"
-                    echo "✅ Created: $generated_file"
-                    ((processed++))
-                else
-                    echo "❌ Generated file not found: $filename"
-                    ((failed++))
-                fi
+                    # Check if a new file was created
+                    if [ "$files_after" -gt "$files_before" ]; then
+                        echo "✅ Created: title-based filename"
+                        ((processed++))
+                    else
+                        echo "❌ Output file not created: $filename"
+                        ((failed++))
+                    fi
             else
                 echo "❌ Failed: $filename.pdf"
                 ((failed++))

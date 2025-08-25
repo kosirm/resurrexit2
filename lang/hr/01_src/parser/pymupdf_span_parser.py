@@ -1094,12 +1094,33 @@ def main():
         import re
         input_basename = os.path.splitext(os.path.basename(args.input))[0]
 
-        # Extract number prefix (e.g., "2-01-" from "2-01-poko")
-        number_match = re.match(r'^(\d+-\d+-)', input_basename)
-        if number_match:
-            number_prefix = number_match.group(1)
+        # Generate consecutive numbering for all songs
+        # Check if we have a global counter file
+        counter_file = os.path.join(os.path.dirname(args.input), '..', '04_chordpro', '.song_counter')
+
+        # Read or initialize counter
+        if os.path.exists(counter_file):
+            try:
+                with open(counter_file, 'r') as f:
+                    counter = int(f.read().strip())
+            except:
+                counter = 1
         else:
-            number_prefix = input_basename + "-"
+            counter = 1
+
+        # Format counter with leading zeros (001, 002, etc.)
+        if counter < 10:
+            number_prefix = f"00{counter}-"
+        elif counter < 100:
+            number_prefix = f"0{counter}-"
+        else:
+            number_prefix = f"{counter}-"
+
+        # Increment and save counter for next song
+        counter += 1
+        os.makedirs(os.path.dirname(counter_file), exist_ok=True)
+        with open(counter_file, 'w') as f:
+            f.write(str(counter))
 
         # Extract title from ChordPro content
         song_title = ""
@@ -1112,7 +1133,16 @@ def main():
         if song_title:
             sanitized_title = sanitize_filename(song_title)
             if sanitized_title:
-                output_file = f"{number_prefix}{sanitized_title}.chordpro"
+                title_based_filename = f"{number_prefix}{sanitized_title}.chordpro"
+                # Determine output directory
+                if args.output:
+                    # Use directory from --output parameter
+                    output_dir = os.path.dirname(args.output)
+                    output_file = os.path.join(output_dir, title_based_filename)
+                else:
+                    # Use same directory as input file
+                    output_file = title_based_filename
+                print(f"✅ ChordPro exported to: {title_based_filename}")
             else:
                 output_file = f"{input_basename}.chordpro"
         else:

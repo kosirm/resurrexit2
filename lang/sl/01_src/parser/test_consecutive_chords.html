@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Consecutive Chords</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;  /* Use Arial as in original PDF */
+            font-size: 14px;  /* Match PDF font size */
+            line-height: 1.4;
+            margin: 20px;
+            background-color: #fff;
+            color: #231f20;  /* Exact color from PDF */
+        }
+        .song-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .title {
+            color: #ec008c;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+        }
+        .kapodaster {
+            text-align: center;
+            font-style: italic;
+            margin-bottom: 20px;
+            color: #ec008c;  /* Pink like title and chords */
+            font-size: 12px;
+        }
+        .song-content {
+            display: table;
+            width: 100%;
+        }
+        .verse-line {
+            display: table-row;
+        }
+        .role-column {
+            display: table-cell;
+            width: 40px;
+            vertical-align: bottom;  /* Align with the lyric text */
+            font-weight: bold;
+            padding-right: 4px;
+            color: #333;
+            font-size: 14px;
+        }
+        .lyric-column {
+            display: table-cell;
+            vertical-align: top;
+            position: relative;
+        }
+        .chord-line {
+            color: #ec008c;
+            font-weight: bold;
+            font-size: 12px;
+            font-family: 'Arial', sans-serif;
+            position: relative;
+            height: 16px;
+            margin-bottom: 2px;
+        }
+        .chord {
+            position: absolute;
+            top: 0;
+            white-space: nowrap;
+        }
+        .lyric-text {
+            font-family: 'Arial', sans-serif;  /* Arial font as in PDF */
+            font-size: 14px;
+            color: #231f20;  /* Exact color from PDF */
+        }
+        .comments {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #ccc;
+        }
+        .comment {
+            color: #ec008c;
+            font-style: italic;
+            margin-bottom: 8px;
+            font-size: 12px;
+            white-space: pre-line;
+        }
+    </style>
+</head>
+<body>
+    <div class="song-container">
+        <div class="title">Test Consecutive Chords</div>
+        <div class="song-content">
+            <div class="verse-line">
+                <div class="role-column">Z.</div>
+                <div class="lyric-column">
+                    <div class="chord-line"><span class="chord" style="left: 8.5px;">H7</span><span class="chord" style="left: 29.0px;">e</span></div>
+                    <div class="lyric-text">AMEN</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
