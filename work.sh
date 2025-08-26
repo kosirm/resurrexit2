@@ -864,7 +864,7 @@ case "$1" in
                 files_before=$(find "$output_abs_path" -name "*.chordpro" 2>/dev/null | wc -l)
 
                 # Let parser generate its own filename (title-based for Slovenian/Croatian)
-                # Pass output directory so parser knows where to save files
+                # Pass dummy filename, parser will extract directory and generate real filename
                 if python $(basename "$parser_file") --input "$pdf_file" --output "$output_abs_path/dummy.chordpro" --song-name "$filename" 2>&1; then
                     # Count ChordPro files after parsing
                     files_after=$(find "$output_abs_path" -name "*.chordpro" 2>/dev/null | wc -l)

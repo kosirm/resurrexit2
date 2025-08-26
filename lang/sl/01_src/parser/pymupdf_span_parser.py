@@ -37,7 +37,7 @@ class Song:
 
 class PyMuPDFSpanParser:
     def __init__(self):
-        self.role_markers = ['K.+Z.', 'K.+P.', 'K.', 'Z.', 'P.', 'D.']
+        self.role_markers = ['K.+Z.', 'K.+P.', 'K.', 'Z.', 'P.', 'O.']  # O. = Otroci (Slovenian children)
         
         # Croatian chord system
         self.base_chords = {
@@ -84,22 +84,37 @@ class PyMuPDFSpanParser:
         """Find individual chord positions within the chord span"""
         chord_positions = []
         
-        # Parse chords from the span text
-        words = chord_span_text.split()
+        # First normalize the entire chord span text to handle spaced chords
+        normalized_chord_text = self._normalize_chord(chord_span_text)
+
+        # Parse chords from the normalized span text
+        words = normalized_chord_text.split()
         current_pos = 0
-        
+
         for word in words:
             if self._looks_like_chord(word):
-                # Find the position of this word in the original text
+                # Find the position of this word in the original (non-normalized) text
+                # We need to map back to the original text position
                 word_start_in_text = chord_span_text.find(word, current_pos)
+
+                # If direct match fails, try to find the chord pattern in original text
+                if word_start_in_text == -1:
+                    # Handle case where normalized chord (e.g., "H7") doesn't exist in original ("H 7")
+                    # Look for the base chord letter(s) in the original text
+                    import re
+                    base_chord = re.match(r'([A-H][a-z]*)', word)
+                    if base_chord:
+                        base_chord_text = base_chord.group(1)
+                        word_start_in_text = chord_span_text.find(base_chord_text, current_pos)
+
                 if word_start_in_text != -1:
                     # Calculate proportional position within the span
                     proportional_pos = word_start_in_text / len(chord_span_text)
                     pixel_pos = chord_span_start + (proportional_pos * chord_span_width)
-                    
+
                     chord_positions.append((word, pixel_pos))
                     print(f"      🎸 Found chord '{word}' at text_pos={word_start_in_text}, pixel_x={pixel_pos:.1f}")
-                    
+
                     current_pos = word_start_in_text + len(word)
         
         return chord_positions
@@ -530,6 +545,12 @@ class PyMuPDFSpanParser:
         if not words:
             return False
 
+        # Special case: single spaced chord like "H 7" should be recognized as chord line
+        if len(words) == 2:
+            normalized_single_chord = self._normalize_chord(' '.join(words))
+            if normalized_single_chord in self.valid_chords:
+                return True
+
         chord_count = 0
         for word in words:
             if self._looks_like_chord(word):
@@ -537,20 +558,31 @@ class PyMuPDFSpanParser:
 
         return (chord_count / len(words)) > 0.6
 
+    def _normalize_chord(self, chord_text: str) -> str:
+        """Normalize chord text by removing spaces between chord and number"""
+        # Handle spaced numbered chords like "H 7" -> "H7"
+        import re
+        # Match chord letter(s) followed by space and number
+        normalized = re.sub(r'([A-H][a-z]*)\s+(\d+)', r'\1\2', chord_text)
+        return normalized
+
     def _looks_like_chord(self, word: str) -> bool:
         """Check if a word looks like a chord"""
-        if word in self.valid_chords:
+        # First normalize the word (handle "H 7" -> "H7")
+        normalized_word = self._normalize_chord(word)
+
+        if normalized_word in self.valid_chords:
             return True
 
         # Check for compound chords
-        if ' ' in word:
-            parts = word.split()
+        if ' ' in normalized_word:
+            parts = normalized_word.split()
             return any(part in self.valid_chords for part in parts)
 
-        if len(word) > 1:
-            for i in range(1, len(word)):
-                left_part = word[:i]
-                right_part = word[i:]
+        if len(normalized_word) > 1:
+            for i in range(1, len(normalized_word)):
+                left_part = normalized_word[:i]
+                right_part = normalized_word[i:]
                 if (left_part in self.valid_chords and
                     right_part in self.valid_chords):
                     return True
@@ -652,6 +684,45 @@ class PyMuPDFSpanParser:
 
         return combined_comments
 
+    def _find_closest_text_line_for_role(self, role_line_data: Dict, text_lines_sorted: List[Dict], role_index: int) -> int:
+        """Find the text line that is closest to the role marker by Y position"""
+        role_y = role_line_data['y']
+
+        # Look at previous and next text lines (excluding other role markers)
+        prev_text_line_index = None
+        next_text_line_index = None
+
+        # Find previous text line (not a role marker)
+        for j in range(role_index - 1, -1, -1):
+            line_data = text_lines_sorted[j]
+            if not self._extract_role_marker(line_data['text']) and line_data['text'].strip():
+                prev_text_line_index = j
+                break
+
+        # Find next text line (not a role marker)
+        for j in range(role_index + 1, len(text_lines_sorted)):
+            line_data = text_lines_sorted[j]
+            if not self._extract_role_marker(line_data['text']) and line_data['text'].strip():
+                next_text_line_index = j
+                break
+
+        # Calculate distances and choose closest
+        if prev_text_line_index is not None and next_text_line_index is not None:
+            prev_distance = abs(role_y - text_lines_sorted[prev_text_line_index]['y'])
+            next_distance = abs(role_y - text_lines_sorted[next_text_line_index]['y'])
+
+            # Prefer previous line if distances are equal (role typically appears before verse)
+            if prev_distance <= next_distance:
+                return prev_text_line_index
+            else:
+                return next_text_line_index
+        elif prev_text_line_index is not None:
+            return prev_text_line_index
+        elif next_text_line_index is not None:
+            return next_text_line_index
+        else:
+            return None
+
     def _parse_verses_with_span_positioning_enhanced(self, text_lines: List[Dict], chord_lines: List[Dict]) -> List[Verse]:
         """Parse verses using span-based chord positioning - enhanced version that only processes verse content"""
         verses = []
@@ -663,6 +734,21 @@ class PyMuPDFSpanParser:
 
         # Track processed lines to avoid duplicates
         processed_indices = set()
+
+        # First pass: identify role markers and their target text lines
+        role_assignments = {}  # text_line_index -> role_marker
+
+        for i, text_line_data in enumerate(text_lines_sorted):
+            text = text_line_data['text']
+            role_marker = self._extract_role_marker(text)
+
+            if role_marker:
+                # Find the closest text line for this role
+                target_line_index = self._find_closest_text_line_for_role(text_line_data, text_lines_sorted, i)
+                if target_line_index is not None:
+                    role_assignments[target_line_index] = role_marker
+                    processed_indices.add(i)  # Mark role marker line as processed
+                    print(f"🎭 Role '{role_marker}' assigned to text line at index {target_line_index} (Y distance improved)")
 
         i = 0
         while i < len(text_lines_sorted):
@@ -677,95 +763,53 @@ class PyMuPDFSpanParser:
                 i += 1
                 continue
 
-            # Check for role marker
-            role_marker = self._extract_role_marker(text)
+            # Check if this text line has an assigned role
+            assigned_role = role_assignments.get(i)
 
-            if role_marker:
+            if assigned_role:
                 # Save previous verse if exists
                 if current_verse_lines and current_role:
                     verses.append(Verse(role=current_role, lines=current_verse_lines))
                     print(f"🎭 Completed verse: {current_role} with {len(current_verse_lines)} lines")
 
-                # Start new verse
-                current_role = role_marker
-                processed_indices.add(i)  # Mark role marker line as processed
+                # Start new verse with assigned role
+                current_role = assigned_role
+                print(f"🎵 Started verse: {current_role} (assigned by Y position)")
 
-                # Check if role marker is on same line as text or separate line
-                if len(text.strip()) > len(role_marker.strip()) + 2:
-                    # Role marker and text on same line (like 2-02-pok9.pdf)
-                    text_after_role = text_line_data['text_content']
+                # Process this text line as the first line of the new verse
+                chords = self._find_chords_with_span_positioning(text_line_data, chord_lines)
 
-                    # Find chords using span-based positioning
-                    chords = self._find_chords_with_span_positioning(text_line_data, chord_lines)
+                verse_line = VerseLine(
+                    text=text.strip(),
+                    chords=chords,
+                    original_line=text
+                )
+                current_verse_lines = [verse_line]
+                processed_indices.add(i)
 
-                    # Check if this is an inline comment (MUST be pink text in parentheses)
-                    is_pink = text_line_data.get('is_pink', False)
-                    if (is_pink and
-                        text_after_role.strip().startswith('(') and
-                        text_after_role.strip().endswith(')')):
-                        # Format as inline comment with empty line before
-                        formatted_text = f"\n{{comment: {text_after_role.strip()}}}"
-                        verse_line = VerseLine(
-                            text=formatted_text,
-                            chords=[],  # Comments don't have chords
-                            original_line=text
-                        )
-                    else:
-                        verse_line = VerseLine(
-                            text=text_after_role,
-                            chords=chords,
-                            original_line=text
-                        )
-                    current_verse_lines = [verse_line]
-                    print(f"🎵 Started verse: {current_role} (same line)")
-
-                else:
-                    # Role marker on separate line (like 2-03-blag.pdf)
-                    # Look for text content on next line(s)
+            elif self._is_inline_comment(text):
+                # Handle inline comment (C: COMMENT TEXT)
+                # Save previous verse if exists
+                if current_verse_lines and current_role:
+                    verses.append(Verse(role=current_role, lines=current_verse_lines))
+                    print(f"🎭 Completed verse: {current_role} with {len(current_verse_lines)} lines")
                     current_verse_lines = []
-                    print(f"🎵 Started verse: {current_role} (separate line)")
+                    current_role = ""
 
-                    # Continue to next line to find the actual text
-                    j = i + 1
-                    while j < len(text_lines_sorted):
-                        next_line_data = text_lines_sorted[j]
-                        next_text = next_line_data['text']
+                # Create inline comment as a standalone verse with empty lines before and after
+                formatted_comment = self._format_inline_comment(text)
+                comment_verse_line = VerseLine(
+                    text=f"\n{formatted_comment}\n",  # Add empty lines before and after
+                    chords=[],  # Comments don't have chords
+                    original_line=text
+                )
+                verses.append(Verse(role="", lines=[comment_verse_line]))
+                print(f"💬 Added inline comment: '{formatted_comment}'")
+                processed_indices.add(i)
 
-                        if not next_text.strip():
-                            j += 1
-                            continue
-
-                        # Stop if we hit another role marker
-                        if self._extract_role_marker(next_text):
-                            break
-
-                        # This is text content for the current role
-                        chords = self._find_chords_with_span_positioning(next_line_data, chord_lines)
-
-                        # Check if this is an inline comment (MUST be pink text in parentheses)
-                        line_text = next_line_data.get('text_content', next_text.strip())
-                        is_pink = next_line_data.get('is_pink', False)
-                        if (is_pink and
-                            line_text.strip().startswith('(') and
-                            line_text.strip().endswith(')')):
-                            # Format as inline comment with empty line before
-                            formatted_text = f"\n{{comment: {line_text.strip()}}}"
-                            verse_line = VerseLine(
-                                text=formatted_text,
-                                chords=[],  # Comments don't have chords
-                                original_line=next_text
-                            )
-                        else:
-                            verse_line = VerseLine(
-                                text=line_text,
-                                chords=chords,
-                                original_line=next_text
-                            )
-                        current_verse_lines.append(verse_line)
-                        processed_indices.add(j)  # Mark this line as processed
-                        print(f"    📝 Added text line: '{next_text.strip()[:50]}...'")
-
-                        j += 1
+            elif self._extract_role_marker(text):
+                # This is a role marker line that wasn't assigned (shouldn't happen with new logic)
+                processed_indices.add(i)  # Skip it
 
             elif current_role:
                 # Continuation line in current verse
@@ -1055,6 +1099,17 @@ class PyMuPDFSpanParser:
             if line.strip().startswith(role):
                 return role
         return ""
+
+    def _is_inline_comment(self, text: str) -> bool:
+        """Check if text line is an inline comment (starts with C:)"""
+        return text.strip().startswith('C:')
+
+    def _format_inline_comment(self, text: str) -> str:
+        """Format inline comment by removing C: prefix and adding ChordPro comment format"""
+        comment_text = text.strip()
+        if comment_text.startswith('C:'):
+            comment_text = comment_text[2:].strip()  # Remove 'C:' prefix
+        return f"{{comment: {comment_text}}}"
 
     def _export_to_chordpro(self, song: Song) -> str:
         """Export song to ChordPro format"""
